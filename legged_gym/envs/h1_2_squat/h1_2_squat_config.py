@@ -72,7 +72,7 @@ class H1_2SquatFlatConfig(LeggedRobotCfg):
         friction_range = [0.1, 1.25]
         randomize_base_mass = True
         added_mass_range = [-1., 3.]
-        push_robots = True
+        push_robots = False
         push_interval_s = 5
         max_push_vel_xy = 1.5
 
@@ -91,12 +91,12 @@ class H1_2SquatFlatConfig(LeggedRobotCfg):
         base_height_target = 1.0
 
         class scales(LeggedRobotCfg.rewards.scales):
-            tracking_lin_vel = 1.0
-            tracking_ang_vel = 0.5
-            lin_vel_z = -2.0
+            # tracking_lin_vel = 1.0
+            # tracking_ang_vel = 0.5
+            # lin_vel_z = -2.0
             ang_vel_xy = -0.05
-            orientation = -1.0
-            base_height = -10.0
+            # orientation = -1.0
+            # base_height = -10.0
             dof_acc = -2.5e-7
             dof_vel = -1e-3
             feet_air_time = 0.0
@@ -107,8 +107,12 @@ class H1_2SquatFlatConfig(LeggedRobotCfg):
             hip_pos = -1.0
             contact_no_vel = -0.2
             feet_swing_height = -20.0
-            contact = 0.18
-            squat_height = 5.0  # 根据 scale 试验调节权重
+            
+            contact = 2  # 0.8
+            squat_height = 10.0  # 根据 scale 试验调节权重
+            upright = 5.0
+            contact_phase = 2.0
+            action_smooth = -0.05  # 平滑动作的惩罚
 
 
 class H1_2RoughCfgPPO(LeggedRobotCfgPPO):
@@ -131,3 +135,4 @@ class H1_2RoughCfgPPO(LeggedRobotCfgPPO):
         max_iterations = 10000
         run_name = ''
         experiment_name = 'h1_2_squat'
+

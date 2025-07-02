@@ -44,6 +44,7 @@ class H1_2SquatEnv(LeggedRobot):
     def _init_buffers(self):
         super()._init_buffers()
         self._init_foot()
+        self.last_actions = torch.zeros(self.num_envs, self.num_actions, device=self.device)
 
     def update_feet_state(self):
         self.gym.refresh_rigid_body_state_tensor(self.sim)
@@ -122,18 +123,64 @@ class H1_2SquatEnv(LeggedRobot):
     def _reward_hip_pos(self):
         return torch.sum(torch.square(self.dof_pos[:,[0,2,6,8]]), dim=1)
     
+    # def _reward_squat_height(self):
+    #     pelvis_z = self.root_states[:, 2]
+    #     t = self.episode_length_buf * self.dt
+    #     target = 1.05 + 0.05 * torch.sin(2 * np.pi * 0.5 * t)
+        
+    #     # Debug print
+    #     if self.episode_length_buf[0] % 100 == 0:  # 每100步打印一次
+    #         print(f"[squat debug] step={self.episode_length_buf[0]}  z={pelvis_z[0].item():.3f}  target={target[0].item():.3f}")
+        
+    #     return -torch.abs(pelvis_z - target)
+
     def _reward_squat_height(self):
         pelvis_z = self.root_states[:, 2]
         t = self.episode_length_buf * self.dt
-        target = 1.05 + 0.05 * torch.sin(2 * np.pi * 0.5 * t)
-        return -torch.abs(pelvis_z - target)
+        target = 1.05 + 0.03 * torch.sin(2 * np.pi * 0.25 * t)
+        error = torch.abs(pelvis_z - target)
+        reward = 1.0 - torch.clamp(error / 0.1, 0, 1)
+
+        if self.episode_length_buf[0] % 200 == 0:
+            print(f"[REWARD] squat_height: {reward[0]:.3f}  z={pelvis_z[0]:.3f}  target={target[0]:.3f}")
+
+        return reward
     
+    # def _reward_upright(self):
+    #     # Encourage Z-axis of gravity vector to align with world Z (up)
+    #     val = torch.clamp(self.projected_gravity[:, 2], 0, 1)
+    #     if self.episode_length_buf[0] % 200 == 0:
+    #         print(f"[REWARD] upright: {val[0]:.3f}")
+    #     return val
+
+    def _reward_upright(self):
+        # 机器人身体z轴和世界z轴对齐
+        up_proj = self.base_quat * torch.tensor([0, 0, 1, 0], device=self.device)
+        return up_proj[:, 2]  # 取 z 分量
+
+    def _reward_contact_phase(self):
+        reward = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
+        for i in range(self.feet_num):
+            phase_i = self.leg_phase[:, i]
+            is_stance = phase_i < 0.5
+            contact = self.contact_forces[:, self.feet_indices[i], 2] > 1.0
+            reward += (is_stance & contact).float()
+        return reward
+    
+    def _reward_action_smooth(self):
+        delta = self.actions - self.last_actions
+        penalty = torch.sum(delta ** 2, dim=1)
+        return penalty
+
+
     def pre_physics_step(self, actions):
+        self.last_actions[:] = self.actions.clone()
         super().pre_physics_step(actions)
-        if self.cfg.domain_rand.push_robots:
-            if torch.rand(1).item() < self.dt / self.cfg.domain_rand.push_interval_s:
-                direction = torch.randn((self.num_envs, 2), device=self.device)
-                direction = direction / torch.norm(direction, dim=1, keepdim=True)
-                impulse = direction * self.cfg.domain_rand.max_push_vel_xy
-                self.root_states[:, 7:9] += impulse  # apply velocity push
+        # # perturb the robot with a random push
+        # if self.cfg.domain_rand.push_robots:
+        #     if torch.rand(1).item() < self.dt / self.cfg.domain_rand.push_interval_s:
+        #         direction = torch.randn((self.num_envs, 2), device=self.device)
+        #         direction = direction / torch.norm(direction, dim=1, keepdim=True)
+        #         impulse = direction * self.cfg.domain_rand.max_push_vel_xy
+        #         self.root_states[:, 7:9] += impulse  # apply velocity push
 
